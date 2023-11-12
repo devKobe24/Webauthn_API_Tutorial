@@ -1,4 +1,5 @@
 import Fluent
+import WebAuthn
 import Vapor
 
 func routes(_ app: Application) throws {
@@ -33,5 +34,23 @@ func routes(_ app: Application) throws {
         try await user.create(on: req.db)
         req.auth.login(user)
         return req.redirect(to: "makeCredential")
+    }
+    
+    authSessionRoute.get("makeCredential") { req -> PublicKeyCredentialCreationOptions in
+        let user = try req.auth.require(User.self)
+        
+        let options = req.webAuthn.beginRegistration(user: user.webAuthnUser)
+        
+        req.session.data["registrationChallenge"] = Data(options.challenge).base64EncodedString()
+        
+        return options
+    }
+}
+
+extension PublicKeyCredentialCreationOptions: AsyncResponseEncodable {
+    public func encodeResponse(for request: Vapor.Request) async throws -> Vapor.Response {
+        var headers = HTTPHeaders()
+        headers.contentType = .json
+        return try Response(status: .ok, headers: headers, body: .init(data: JSONEncoder().encode(self)))
     }
 }
